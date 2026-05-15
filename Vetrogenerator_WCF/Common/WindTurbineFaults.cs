@@ -2,7 +2,7 @@ using System.Runtime.Serialization;
 
 namespace Common
 {
-    /// <summary>Baca se kada CSV red ne može da se parsira (pogrešan broj kolona, loš format broja, itd.).</summary>
+    /// Baca se kada CSV red ne može da se parsira (pogrešan broj kolona, loš format broja, itd.).
     [DataContract]
     public class DataFormatFault
     {
@@ -16,7 +16,7 @@ namespace Common
         [DataMember] public int    RowIndex { get; set; }
     }
 
-    /// <summary>Baca se kada uzorak ne prođe validaciju poslovnih pravila (vrednosti van opsega, negativne vrednosti gde ne treba, itd.).</summary>
+    /// Baca se kada uzorak ne prođe validaciju poslovnih pravila (vrednosti van opsega, negativne vrednosti gde ne treba, itd.)
     [DataContract]
     public class ValidationFault
     {
