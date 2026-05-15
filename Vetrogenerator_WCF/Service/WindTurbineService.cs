@@ -1,8 +1,11 @@
 using System;
+using System.ServiceModel;
 using Common;
 
 namespace Service
 {
+    [ServiceBehavior(InstanceContextMode = InstanceContextMode.Single,
+                     ConcurrencyMode = ConcurrencyMode.Single)]
     public class WindTurbineService : IWindTurbineService
     {
         // ── Eventi ──────────────────────────────────────────────────────────
@@ -19,6 +22,7 @@ namespace Service
         public event EventHandler<FrequencyDeviationEventArgs> OnFrequencyDeviation;
         public event EventHandler<FrequencySpikeEventArgs>     OnFrequencySpike;
 
+       
         public void StartSession(WindTurbineMeta meta)
         {
             // TODO:
