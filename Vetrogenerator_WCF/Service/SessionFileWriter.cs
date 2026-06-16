@@ -5,17 +5,6 @@ using Common;
 
 namespace Service
 {
-    /// <summary>
-    /// Upravlja snimanjem podataka jedne sesije na disk (Kontrolna tačka 2 — zadatak 6).
-    ///
-    /// Pri kreiranju (StartSession) pravi strukturu:
-    ///     Data/&lt;TurbineId&gt;/&lt;YYYY-MM-DD&gt;/session.csv
-    ///     Data/&lt;TurbineId&gt;/&lt;YYYY-MM-DD&gt;/rejects.csv
-    ///
-    /// - Valjani uzorci se nadovezuju (append) u session.csv.
-    /// - Odbijeni redovi se beleže u rejects.csv (razlog + originalna linija).
-    /// - Resursi (FileStream/StreamWriter) se oslobađaju kroz Dispose pattern.
-    /// </summary>
     public sealed class SessionFileWriter : IDisposable
     {
         private readonly StreamWriter _sessionWriter;
@@ -26,7 +15,6 @@ namespace Service
         public string RejectsFilePath { get; }
         public string SessionDirectory { get; }
 
-        // CSV header za session.csv — odgovara poljima WindTurbineSample DataContract-a.
         private const string SessionHeader =
             "Timestamp,WindSpeedMs,WindDirectionDeg,NacellePositionDeg,PowerKW," +
             "PotentialPowerDefaultKW,PowerFactor,ReactivePowerKvar,GridFrequencyHz," +
@@ -34,10 +22,6 @@ namespace Service
 
         private const string RejectsHeader = "RejectedAtUtc,RowIndex,Reason,OriginalLine";
 
-        /// <summary>
-        /// Kreira strukturu Data/&lt;TurbineId&gt;/&lt;YYYY-MM-DD&gt;/ i otvara fajlove za dopisivanje.
-        /// Datum se uzima iz trenutka pokretanja sesije (datum servera).
-        /// </summary>
         public SessionFileWriter(string dataRoot, string turbineId)
         {
             if (string.IsNullOrWhiteSpace(dataRoot)) dataRoot = "Data";
@@ -50,11 +34,9 @@ namespace Service
             SessionFilePath = Path.Combine(SessionDirectory, "session.csv");
             RejectsFilePath = Path.Combine(SessionDirectory, "rejects.csv");
 
-            // Header se upisuje samo ako fajl još ne postoji (da se ne dupliraju kod append-a).
             bool sessionIsNew = !File.Exists(SessionFilePath);
             bool rejectsIsNew = !File.Exists(RejectsFilePath);
 
-            // append: true → nadovezivanje na postojeći fajl (FileStream/StreamWriter).
             _sessionWriter = new StreamWriter(
                 new FileStream(SessionFilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
             { AutoFlush = true };
@@ -67,7 +49,6 @@ namespace Service
             if (rejectsIsNew) _rejectsWriter.WriteLine(RejectsHeader);
         }
 
-        /// <summary>Dopisuje jedan valjan uzorak u session.csv.</summary>
         public void WriteSample(WindTurbineSample s)
         {
             ThrowIfDisposed();
@@ -92,7 +73,6 @@ namespace Service
             _sessionWriter.WriteLine(line);
         }
 
-        /// <summary>Beleži odbijeni red u rejects.csv: razlog odbijanja + originalna linija.</summary>
         public void WriteReject(int rowIndex, string reason, string originalLine)
         {
             ThrowIfDisposed();
@@ -108,7 +88,6 @@ namespace Service
             _rejectsWriter.WriteLine(line);
         }
 
-        /// <summary>Escapuje polje za CSV (navodnici ako sadrži , " ili novi red).</summary>
         private static string Csv(string value)
         {
             if (value == null) return string.Empty;
@@ -123,13 +102,12 @@ namespace Service
                 throw new ObjectDisposedException(nameof(SessionFileWriter));
         }
 
-        // ── Dispose pattern ─────────────────────────────────────────────────
         public void Dispose()
         {
             if (_disposed) return;
 
-            try { _sessionWriter?.Flush(); _sessionWriter?.Dispose(); } catch { /* ignore */ }
-            try { _rejectsWriter?.Flush(); _rejectsWriter?.Dispose(); } catch { /* ignore */ }
+            try { _sessionWriter?.Flush(); _sessionWriter?.Dispose(); } catch { }
+            try { _rejectsWriter?.Flush(); _rejectsWriter?.Dispose(); } catch { }
 
             _disposed = true;
         }

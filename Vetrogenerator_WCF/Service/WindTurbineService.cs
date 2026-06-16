@@ -25,25 +25,22 @@ namespace Service
         private int _receivedCount;
         private int _rejectedCount;
 
-        // Snimanje na disk (Kontrolna tačka 2 — zadatak 6).
         private SessionFileWriter _fileWriter;
 
         public void StartSession(WindTurbineMeta meta)
         {
             if (meta == null)
                 throw new FaultException<ValidationFault>(
-                    new ValidationFault("Meta ne sme biti null.", -1));
+                    new ValidationFault("Meta ne sme biti null.", -1), new FaultReason("Meta ne sme biti null."));
 
             _currentMeta = meta;
             _receivedCount = 0;
             _rejectedCount = 0;
 
-            // ── Snimanje: kreiraj Data/<TurbineId>/<YYYY-MM-DD>/ i otvori session.csv + rejects.csv ──
             string dataRoot = ConfigurationManager.AppSettings["DataPath"] ?? "Data";
             _fileWriter = new SessionFileWriter(dataRoot, meta.TurbineId);
 
             OnTransferStarted?.Invoke(this, new TransferStartedEventArgs(meta));
-            Console.WriteLine($"[SERVER] Prenos u toku — TurbineId={meta.TurbineId}");
             Console.WriteLine($"[SERVER] Snimam u: {_fileWriter.SessionFilePath}");
         }
 
@@ -51,11 +48,11 @@ namespace Service
         {
             if (sample == null)
                 throw new FaultException<DataFormatFault>(
-                    new DataFormatFault("Uzorak ne sme biti null.", -1));
+                    new DataFormatFault("Uzorak ne sme biti null.", -1), new FaultReason("Uzorak ne sme biti null."));
 
             if (_fileWriter == null)
                 throw new FaultException<ValidationFault>(
-                    new ValidationFault("Sesija nije započeta (pozovite StartSession pre PushSample).", sample.RowIndex));
+                    new ValidationFault("Sesija nije započeta (pozovite StartSession pre PushSample).", sample.RowIndex), new FaultReason("Sesija nije započeta."));
 
             // ── validacija ──────────────────────────────────────────────────
             // timestamp mora da bude pravilno parsiran
@@ -74,36 +71,27 @@ namespace Service
             if (sample.GeneratorRpm < 0)
                 RejectAndThrow(sample, $"GeneratorRpm ne sme biti negativan: {sample.GeneratorRpm}", isDataFormat: false);
 
-            // ── SVE OK → upiši red u session.csv ────────────────────────────
+            // ── SVE OK ───────────────────────────────────
             _fileWriter.WriteSample(sample);
             _receivedCount++;
 
             OnSampleReceived?.Invoke(this,
                 new SampleReceivedEventArgs(sample, _currentMeta?.TurbineId ?? "unknown"));
-
-            Console.WriteLine($"[SERVER] Primljen red {sample.RowIndex} | {sample.Timestamp:yyyy-MM-dd HH:mm} | Wind={sample.WindSpeedMs:F1} m/s");
         }
 
-        /// <summary>
-        /// Beleži odbijeni uzorak u rejects.csv (razlog + rekonstruisana originalna linija)
-        /// i potom baca odgovarajući FaultException (zadatak 3 — DataFormatFault/ValidationFault).
-        /// </summary>
         private void RejectAndThrow(WindTurbineSample sample, string reason, bool isDataFormat)
         {
             _rejectedCount++;
             _fileWriter.WriteReject(sample.RowIndex, reason, ReconstructLine(sample));
-            Console.WriteLine($"[SERVER] ODBIJEN red {sample.RowIndex} → rejects.csv | {reason}");
+            OnWarningRaised?.Invoke(this,
+                new WarningRaisedEventArgs(_currentMeta?.TurbineId ?? "unknown", $"Odbijen uzorak → rejects.csv: {reason}", sample.RowIndex));
 
             if (isDataFormat)
-                throw new FaultException<DataFormatFault>(new DataFormatFault(reason, sample.RowIndex));
+                throw new FaultException<DataFormatFault>(new DataFormatFault(reason, sample.RowIndex), new FaultReason(reason));
             else
-                throw new FaultException<ValidationFault>(new ValidationFault(reason, sample.RowIndex));
+                throw new FaultException<ValidationFault>(new ValidationFault(reason, sample.RowIndex), new FaultReason(reason));
         }
 
-        /// <summary>
-        /// Rekonstruiše CSV liniju iz primljenog uzorka (server ne dobija sirov tekst reda,
-        /// pa se originalna linija za rejects.csv sastavlja iz vrednosti uzorka).
-        /// </summary>
         private static string ReconstructLine(WindTurbineSample s)
         {
             var ci = CultureInfo.InvariantCulture;
@@ -129,9 +117,6 @@ namespace Service
             OnTransferCompleted?.Invoke(this,
                 new TransferCompletedEventArgs(turbineId, _receivedCount));
 
-            Console.WriteLine($"[SERVER] Prenos završen — primljeno {_receivedCount}, odbijeno {_rejectedCount} uzoraka.");
-
-            // ── Snimanje: zatvori fajlove (Dispose pattern) ─────────────────
             _fileWriter?.Dispose();
             _fileWriter = null;
 

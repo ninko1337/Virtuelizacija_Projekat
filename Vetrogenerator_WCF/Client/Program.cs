@@ -34,6 +34,8 @@ namespace Client
             if (!int.TryParse(Console.ReadLine(), out choice) || choice < 1 || choice > 6)
             {
                 Console.WriteLine("[GREŠKA] Neispravan izbor. Prekidam.");
+                Console.WriteLine("Pritisnite ENTER za izlaz...");
+                Console.ReadLine();
                 return;
             }
 
@@ -44,6 +46,8 @@ namespace Client
             if (!File.Exists(csvPath))
             {
                 Console.WriteLine($"[GREŠKA] Fajl nije pronađen: {csvPath}");
+                Console.WriteLine("Pritisnite ENTER za izlaz...");
+                Console.ReadLine();
                 return;
             }
 
@@ -56,6 +60,8 @@ namespace Client
             if (samples.Count == 0)
             {
                 Console.WriteLine("[UPOZORENJE] Nema valjanih uzoraka za slanje. Prekidam.");
+                Console.WriteLine("Pritisnite ENTER za izlaz...");
+                Console.ReadLine();
                 return;
             }
 
