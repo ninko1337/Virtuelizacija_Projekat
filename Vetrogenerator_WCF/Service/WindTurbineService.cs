@@ -27,6 +27,23 @@ namespace Service
 
         private SessionFileWriter _fileWriter;
 
+        private readonly double _underPerformanceAlpha;
+        private readonly double _yawMisalignThresholdDeg;
+        private readonly double _frequencyDeviationAbsHz;
+        private readonly double _frequencySpikeThresholdHz;
+
+        private bool _hasPreviousFrequency;
+        private double _previousFrequencyHz;
+
+        public WindTurbineService(double underPerformanceAlpha, double yawMisalignThresholdDeg,
+                                  double frequencyDeviationAbsHz, double frequencySpikeThresholdHz)
+        {
+            _underPerformanceAlpha = underPerformanceAlpha;
+            _yawMisalignThresholdDeg = yawMisalignThresholdDeg;
+            _frequencyDeviationAbsHz = frequencyDeviationAbsHz;
+            _frequencySpikeThresholdHz = frequencySpikeThresholdHz;
+        }
+
         public void StartSession(WindTurbineMeta meta)
         {
             if (meta == null)
@@ -36,6 +53,7 @@ namespace Service
             _currentMeta = meta;
             _receivedCount = 0;
             _rejectedCount = 0;
+            _hasPreviousFrequency = false;
 
             string dataRoot = ConfigurationManager.AppSettings["DataPath"] ?? "Data";
             _fileWriter = new SessionFileWriter(dataRoot, meta.TurbineId);
@@ -77,6 +95,53 @@ namespace Service
 
             OnSampleReceived?.Invoke(this,
                 new SampleReceivedEventArgs(sample, _currentMeta?.TurbineId ?? "unknown"));
+
+            RunAnalytics(sample);
+        }
+
+        private void RunAnalytics(WindTurbineSample sample)
+        {
+            string turbineId = _currentMeta?.TurbineId ?? "unknown";
+
+            if (!double.IsNaN(sample.PowerKW) && !double.IsNaN(sample.PotentialPowerDefaultKW)
+                && sample.PotentialPowerDefaultKW > 0
+                && sample.PowerKW < _underPerformanceAlpha * sample.PotentialPowerDefaultKW)
+            {
+                double deltaPct = (sample.PotentialPowerDefaultKW - sample.PowerKW) / sample.PotentialPowerDefaultKW * 100.0;
+                OnUnderPerformance?.Invoke(this,
+                    new UnderPerformanceEventArgs(turbineId, sample.Timestamp, sample.RowIndex,
+                        sample.PowerKW, sample.PotentialPowerDefaultKW, deltaPct));
+            }
+
+            if (!double.IsNaN(sample.WindDirectionDeg) && !double.IsNaN(sample.NacellePositionDeg))
+            {
+                double misalign = Math.Abs(sample.WindDirectionDeg - sample.NacellePositionDeg);
+                if (misalign > _yawMisalignThresholdDeg)
+                    OnYawMisalignment?.Invoke(this,
+                        new YawMisalignmentEventArgs(turbineId, sample.Timestamp, sample.RowIndex,
+                            sample.WindDirectionDeg, sample.NacellePositionDeg, misalign));
+            }
+
+            if (!double.IsNaN(sample.GridFrequencyHz))
+            {
+                double deviation = Math.Abs(sample.GridFrequencyHz - 50.0);
+                if (deviation > _frequencyDeviationAbsHz)
+                    OnFrequencyDeviation?.Invoke(this,
+                        new FrequencyDeviationEventArgs(turbineId, sample.Timestamp, sample.RowIndex,
+                            sample.GridFrequencyHz, deviation));
+
+                if (_hasPreviousFrequency)
+                {
+                    double delta = sample.GridFrequencyHz - _previousFrequencyHz;
+                    if (Math.Abs(delta) > _frequencySpikeThresholdHz)
+                        OnFrequencySpike?.Invoke(this,
+                            new FrequencySpikeEventArgs(turbineId, sample.Timestamp, sample.RowIndex,
+                                _previousFrequencyHz, sample.GridFrequencyHz, delta));
+                }
+
+                _previousFrequencyHz = sample.GridFrequencyHz;
+                _hasPreviousFrequency = true;
+            }
         }
 
         private void RejectAndThrow(WindTurbineSample sample, string reason, bool isDataFormat)

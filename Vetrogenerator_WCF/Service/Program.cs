@@ -15,7 +15,8 @@ namespace Service
             double frequencyDeviationAbsHz = ReadDouble("FrequencyDeviationAbsHz", 0.5);
             double frequencySpikeThresholdHz = ReadDouble("FrequencySpikeThresholdHz", 0.2);
 
-            WindTurbineService serviceInstance = new WindTurbineService();
+            WindTurbineService serviceInstance = new WindTurbineService(
+                underPerformanceAlpha, yawMisalignThresholdDeg, frequencyDeviationAbsHz, frequencySpikeThresholdHz);
 
             serviceInstance.OnTransferStarted += (s, e) =>
                 Console.WriteLine($"[EVENT] OnTransferStarted | TurbineId={e.Meta.TurbineId} | File={e.Meta.FileName} | Rows={e.Meta.TotalRows} | Prenos u toku...");
@@ -28,6 +29,18 @@ namespace Service
 
             serviceInstance.OnWarningRaised += (s, e) =>
                 Console.WriteLine($"[EVENT] OnWarningRaised | {e.TurbineId} | Red {e.RowIndex} | {e.Message} | {e.RaisedAt:HH:mm:ss}");
+
+            serviceInstance.OnUnderPerformance += (s, e) =>
+                Console.WriteLine($"[EVENT] UnderPerformanceWarning | {e.TurbineId} | Red {e.RowIndex} | {e.Timestamp:yyyy-MM-dd HH:mm} | Power={e.PowerKW:F1} kW | Potential={e.PotentialKW:F1} kW | deltaPct={e.DeltaPct:F1}%");
+
+            serviceInstance.OnYawMisalignment += (s, e) =>
+                Console.WriteLine($"[EVENT] YawMisalignmentWarning | {e.TurbineId} | Red {e.RowIndex} | {e.Timestamp:yyyy-MM-dd HH:mm} | WindDir={e.WindDirectionDeg:F1} | Nacelle={e.NacellePositionDeg:F1} | Misalign={e.MisalignDeg:F1}");
+
+            serviceInstance.OnFrequencyDeviation += (s, e) =>
+                Console.WriteLine($"[EVENT] FrequencyDeviationWarning | {e.TurbineId} | Red {e.RowIndex} | {e.Timestamp:yyyy-MM-dd HH:mm} | f={e.FrequencyHz:F3} Hz | |f-50|={e.DeviationHz:F3} Hz");
+
+            serviceInstance.OnFrequencySpike += (s, e) =>
+                Console.WriteLine($"[EVENT] FrequencySpike | {e.TurbineId} | Red {e.RowIndex} | {e.Timestamp:yyyy-MM-dd HH:mm} | {e.FrequencyBefore:F3} -> {e.FrequencyAfter:F3} Hz | df={e.DeltaHz:F3} Hz ({e.Direction})");
 
             using (ServiceHost host = new ServiceHost(serviceInstance))
             {
